@@ -8,13 +8,13 @@ Install SDKs with a single command. Switch between versions effortlessly. Works 
 curl -s "https://get.sdkman.io" | bash
 ```
 
-→ [sdkman.io](https://sdkman.io) · [Docs](https://sdkman.io/usage) · [Discord](https://discord.gg/sdkman)
+→ [sdkman.io](https://sdkman.io) · [Docs](https://sdkman.io/usage) · [Discord](https://discord.gg/4cmE8dVPSE)
 
 ---
 
 ## Get Involved
 
-- **Found a bug or have an idea?** Start a conversation on [Discord](https://discord.gg/sdkman) first
+- **Found a bug or have an idea?** Start a conversation on [Discord](https://discord.gg/4cmE8dVPSE) first
 - **Contributing?** Check the [contributing guidelines](https://github.com/sdkman/sdkman-cli/blob/master/CONTRIBUTING.md)
 - **Vendors:** Publish new SDK releases via [vendor-release](https://github.com/sdkman/vendor-release)
 
