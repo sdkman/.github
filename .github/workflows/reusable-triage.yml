@@ -52,9 +52,7 @@ jobs:
             --arg message "$MSG" \
             --arg name "GitHub Triage" \
             '{message: $message, name: $name, deliver: true, channel: "discord", to: "1474759623209783327"}')
-          echo "=== Debug: testing connectivity ==="
-          echo "HOOK_URL length: ${#HOOK_URL}"
-          curl -v --connect-timeout 10 -X POST \
+          curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
