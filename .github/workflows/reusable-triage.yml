@@ -37,7 +37,7 @@ jobs:
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${ISSUE_URL}"
             MSG+=$'\n\n'"${ISSUE_BODY}"
-          elif [ "$EVENT_NAME" = "pull_request" ]; then
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; then
             MSG="${INSTRUCTION}"$'\n\n'"New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${PR_URL}"
