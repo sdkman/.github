@@ -11,13 +11,13 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    if: github.event.sender.type != 'Bot'
     steps:
       - name: Send to OpenClaw
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
           SENDER: ${{ github.event.sender.login }}
+          SENDER_TYPE: ${{ github.event.sender.type }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
@@ -32,13 +32,25 @@ jobs:
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
         run: |
           INSTRUCTION="Brief notification only. Provide: repo + number + title + author + one sentence summary + link. No assessment, no suggestions, no follow-up questions unless asked."
+          NOTIFICATION_NAME="GitHub Triage"
+          
+          # Determine if this is from Dependabot
+          if [ "$SENDER" = "dependabot[bot]" ]; then
+            NOTIFICATION_NAME="📦 Dependabot Update"
+          fi
+          
           if [ "$EVENT_NAME" = "issues" ]; then
             MSG="${INSTRUCTION}"$'\n\n'"New issue in ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${ISSUE_URL}"
             MSG+=$'\n\n'"${ISSUE_BODY}"
           elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; then
-            MSG="${INSTRUCTION}"$'\n\n'"New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
+            # Add Dependabot prefix if applicable
+            if [ "$SENDER" = "dependabot[bot]" ]; then
+              MSG="${INSTRUCTION}"$'\n\n'"[DEPENDENCY UPDATE] New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
+            else
+              MSG="${INSTRUCTION}"$'\n\n'"New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
+            fi
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${PR_URL}"
             MSG+=$'\n\n'"${PR_BODY}"
@@ -50,7 +62,7 @@ jobs:
           fi
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
-            --arg name "GitHub Triage" \
+            --arg name "$NOTIFICATION_NAME" \
             '{message: $message, name: $name, model: "openrouter/anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "1474759623209783327"}')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
