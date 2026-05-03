@@ -11,7 +11,6 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    if: github.event.sender.type != 'Bot'
     steps:
       - name: Send to OpenClaw
         env:
@@ -32,6 +31,12 @@ jobs:
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
         run: |
           INSTRUCTION="Brief notification only. Provide: repo + number + title + author + one sentence summary + link. No assessment, no suggestions, no follow-up questions unless asked."
+          NAME="GitHub Triage"
+          if [ "$SENDER" = "dependabot[bot]" ]; then
+            NAME="📦 Dependabot Update"
+            PR_TITLE="[DEPENDENCY UPDATE] ${PR_TITLE}"
+            ISSUE_TITLE="[DEPENDENCY UPDATE] ${ISSUE_TITLE}"
+          fi
           if [ "$EVENT_NAME" = "issues" ]; then
             MSG="${INSTRUCTION}"$'\n\n'"New issue in ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
@@ -50,7 +55,7 @@ jobs:
           fi
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
-            --arg name "GitHub Triage" \
+            --arg name "$NAME" \
             '{message: $message, name: $name, model: "openrouter/anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "1474759623209783327"}')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
