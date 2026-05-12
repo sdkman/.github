@@ -4,15 +4,16 @@ on:
   workflow_call:
     secrets:
       OPENCLAW_HOOK_URL:
-        required: true
+        required: false
       OPENCLAW_HOOK_TOKEN:
-        required: true
+        required: false
 
 jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
       - name: Send to OpenClaw
+        if: secrets.OPENCLAW_HOOK_URL != '' && secrets.OPENCLAW_HOOK_TOKEN != ''
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
