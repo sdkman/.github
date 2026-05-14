@@ -15,7 +15,9 @@ jobs:
       HAS_OPENCLAW_SECRETS: ${{ secrets.OPENCLAW_HOOK_URL != '' && secrets.OPENCLAW_HOOK_TOKEN != '' }}
     steps:
       - name: Send to OpenClaw
-        if: env.HAS_OPENCLAW_SECRETS == 'true'
+        if: >-
+          env.HAS_OPENCLAW_SECRETS == 'true' &&
+          !(github.event_name == 'issue_comment' && github.event.sender.login == 'chloe41427[bot]')
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
