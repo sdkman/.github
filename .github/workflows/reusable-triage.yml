@@ -35,6 +35,12 @@ jobs:
           HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
         run: |
+          # Defensive: never emit a notification with no issue/PR context
+          # (e.g. if a caller is ever wired to a non-issue/PR event).
+          if [ -z "${ISSUE_NUMBER}" ] && [ -z "${PR_NUMBER}" ]; then
+            echo "No issue or PR number in payload (event=${EVENT_NAME}) — skipping."
+            exit 0
+          fi
           INSTRUCTION="Brief notification only. Provide: repo + number + title + author + one sentence summary + link. No assessment, no suggestions, no follow-up questions unless asked."
           if [ "$SENDER" = "dependabot[bot]" ]; then
             TITLE_PREFIX="[DEPENDENCY UPDATE] "
