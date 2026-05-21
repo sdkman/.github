@@ -16,24 +16,47 @@ on:
 jobs:
   triage:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.head_repository.fork == true || github.event.workflow_run.triggering_actor.login == 'dependabot[bot]'
+    # Notify once per PR: only the PR-event CI run (not the duplicate push run),
+    # and only for fork or Dependabot PRs.
+    if: >-
+      (github.event.workflow_run.event == 'pull_request' ||
+       github.event.workflow_run.event == 'pull_request_target') &&
+      (github.event.workflow_run.head_repository.fork == true ||
+       github.event.workflow_run.triggering_actor.login == 'dependabot[bot]')
     steps:
       - name: Send fork PR triage notification
         env:
           HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # Fetch PR details from completed workflow
-          PR_DATA=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }} \
-            --jq '.pull_requests[0] | {number, title, html_url, user: .head.user.login}')
+          # Resolve the PR number. workflow_run.pull_requests[] entries are stubs
+          # (number/head/base only), so fall back to the head SHA when absent
+          # (e.g. fork PRs, where the array is empty).
+          PR_NUMBER=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq '.pull_requests[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+              --jq 'map(select(.state == "open")) | .[0].number // empty')
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR associated with this run — skipping."
+            exit 0
+          fi
 
-          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty')
-          [ -z "$PR_NUMBER" ] && exit 0
+          # The run stub has no title/html_url/author, so fetch the full PR object.
+          PR_JSON=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '{title, html_url, author: .user.login}')
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title // empty')
+          PR_URL=$(echo "$PR_JSON" | jq -r '.html_url // empty')
+          PR_AUTHOR=$(echo "$PR_JSON" | jq -r '.author // empty')
 
-          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
-          PR_URL=$(echo "$PR_DATA" | jq -r '.html_url')
-          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user')
+          # Never send a blank notification.
+          if [ -z "$PR_TITLE" ] || [ -z "$PR_URL" ]; then
+            echo "PR #$PR_NUMBER details unavailable (title/url empty) — skipping."
+            exit 0
+          fi
 
           MSG="PR #${PR_NUMBER}: ${PR_TITLE}"$'\n'"Author: ${PR_AUTHOR}"$'\n'"URL: ${PR_URL}"
 
