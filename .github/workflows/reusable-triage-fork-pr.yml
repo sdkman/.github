@@ -40,7 +40,7 @@ jobs:
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
             --arg name "GitHub Triage" \
-            '{message: $message, name: $name, deliver: true, channel: "discord", to: "1474759623209783327"}')
+            '{message: $message, name: $name, deliver: true, channel: "discord", to: "user:918237603617206303"}')
 
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
