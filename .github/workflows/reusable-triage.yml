@@ -68,7 +68,7 @@ jobs:
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
             --arg name "$NOTIFICATION_NAME" \
-            '{message: $message, name: $name, model: "openrouter/anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "user:918237603617206303"}')
+            '{message: $message, name: $name, model: "openrouter/anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
