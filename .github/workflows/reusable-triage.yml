@@ -17,9 +17,7 @@ jobs:
       - name: Send to OpenClaw
         if: >-
           env.HAS_OPENCLAW_SECRETS == 'true' &&
-          !(github.event.sender.login == 'chloe41427[bot]') &&
-          github.event.issue.user.login != 'dependabot[bot]' &&
-          github.event.pull_request.user.login != 'dependabot[bot]'
+          !(github.event.sender.login == 'chloe41427[bot]')
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
