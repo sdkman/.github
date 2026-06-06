@@ -1,0 +1,16 @@
+# Redirect stub: kept until all callers migrate to reusable-workflow-failure-alert.yml.
+# Deleted in the final stub-cleanup PR (rollout step 7).
+name: "Reusable: Workflow Failure Alert"
+
+on:
+  workflow_call:
+    secrets:
+      OPENCLAW_HOOK_URL:
+        required: true
+      OPENCLAW_HOOK_TOKEN:
+        required: true
+
+jobs:
+  delegate:
+    uses: sdkman/.github/.github/workflows/reusable-workflow-failure-alert.yml@main
+    secrets: inherit
