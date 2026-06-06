@@ -1,0 +1,16 @@
+# Redirect stub: kept until all callers migrate to reusable-triage-events.yml.
+# Deleted in the final stub-cleanup PR (rollout step 7).
+name: "Reusable: Triage (Issues, Comments, PRs)"
+
+on:
+  workflow_call:
+    secrets:
+      OPENCLAW_HOOK_URL:
+        required: false
+      OPENCLAW_HOOK_TOKEN:
+        required: false
+
+jobs:
+  delegate:
+    uses: sdkman/.github/.github/workflows/reusable-triage-events.yml@main
+    secrets: inherit
