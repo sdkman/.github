@@ -1,4 +1,4 @@
-name: Reusable - Notify on Failure
+name: "Reusable: Workflow Failure Alert"
 
 on:
   workflow_call:
@@ -12,7 +12,15 @@ jobs:
   notify:
     name: "Notify on Failure"
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'failure'
+    # Self-notify guard: never DM on failures of the notification workflows
+    # themselves (would feedback-loop). Keys on the CALLER workflow's name
+    # (github.event.workflow_run.name), not the reusable's name:.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.name != 'Triage: Issues, Comments, PRs' &&
+      github.event.workflow_run.name != 'Triage: Fork PR' &&
+      github.event.workflow_run.name != 'Workflow Failure Alert' &&
+      github.event.workflow_run.name != 'Dependabot Digest'
     steps:
       - name: Notify
         env:
@@ -24,7 +32,7 @@ jobs:
         run: |
           TEXT="❌ ${WORKFLOW} failed: ${REPO}"
           TEXT+=$'\nRun: '"${RUN_URL}"
-          PAYLOAD=$(jq -n --arg text "$TEXT" '{text: $text, deliver: true, channel: "discord", to: "1474759623209783327"}')
+          PAYLOAD=$(jq -n --arg text "$TEXT" '{text: $text, deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
