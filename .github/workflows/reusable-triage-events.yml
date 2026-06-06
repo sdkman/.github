@@ -1,4 +1,4 @@
-name: Reusable - Issue Triage Notification
+name: "Reusable: Triage (Issues, Comments, PRs)"
 
 on:
   workflow_call:
@@ -17,7 +17,8 @@ jobs:
       - name: Send to OpenClaw
         if: >-
           env.HAS_OPENCLAW_SECRETS == 'true' &&
-          !(github.event.sender.login == 'chloe41427[bot]')
+          github.event.sender.login != 'marc0der' &&
+          !endsWith(github.event.sender.login, '[bot]')
         env:
           EVENT_NAME: ${{ github.event_name }}
           REPO: ${{ github.repository }}
@@ -42,28 +43,24 @@ jobs:
             exit 0
           fi
           INSTRUCTION="Brief notification only. Provide: repo + number + title + author + one sentence summary + link. No assessment, no suggestions, no follow-up questions unless asked."
-          if [ "$SENDER" = "dependabot[bot]" ]; then
-            TITLE_PREFIX="[DEPENDENCY UPDATE] "
-            NOTIFICATION_NAME="📦 Dependabot Update"
-          else
-            TITLE_PREFIX=""
-            NOTIFICATION_NAME="GitHub Triage"
-          fi
+          NOTIFICATION_NAME="GitHub Triage"
+          # Cap any user-supplied body so a 30 KB issue can't flood Discord or Haiku.
+          trim() { local s="$1"; if [ ${#s} -gt 2000 ]; then printf '%s\n…(truncated)\n' "${s:0:2000}"; else printf '%s\n' "$s"; fi; }
           if [ "$EVENT_NAME" = "issues" ]; then
-            MSG="${INSTRUCTION}"$'\n\n'"${TITLE_PREFIX}New issue in ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+            MSG="${INSTRUCTION}"$'\n\n'"New issue in ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${ISSUE_URL}"
-            MSG+=$'\n\n'"${ISSUE_BODY}"
+            MSG+=$'\n\n'"$(trim "$ISSUE_BODY")"
           elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "pull_request_target" ]; then
-            MSG="${INSTRUCTION}"$'\n\n'"${TITLE_PREFIX}New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
+            MSG="${INSTRUCTION}"$'\n\n'"New PR in ${REPO} — #${PR_NUMBER}: ${PR_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
             MSG+=$'\nURL: '"${PR_URL}"
-            MSG+=$'\n\n'"${PR_BODY}"
+            MSG+=$'\n\n'"$(trim "$PR_BODY")"
           else
-            MSG="${INSTRUCTION}"$'\n\n'"${TITLE_PREFIX}New comment on ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+            MSG="${INSTRUCTION}"$'\n\n'"New comment on ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
             MSG+=$'\nFrom: '"${SENDER}"
             MSG+=$'\nURL: '"${COMMENT_URL}"
-            MSG+=$'\n\n'"${COMMENT_BODY}"
+            MSG+=$'\n\n'"$(trim "$COMMENT_BODY")"
           fi
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
