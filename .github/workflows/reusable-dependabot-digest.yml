@@ -1,0 +1,56 @@
+name: "Reusable: Dependabot Digest"
+
+on:
+  workflow_call:
+    secrets:
+      OPENCLAW_HOOK_URL:
+        required: true
+      OPENCLAW_HOOK_TOKEN:
+        required: true
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compose and send Dependabot digest
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
+          HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
+        run: |
+          # Self-healing: any non-2xx (rate limit, transient 5xx, auth blip) logs
+          # and exits 0 — a digest hiccup must never raise a failure alert.
+          set +e
+          PRS=$(gh api "repos/${REPO}/pulls?state=open&per_page=100" 2>&1)
+          RC=$?
+          set -e
+          if [ $RC -ne 0 ]; then
+            echo "::warning::Dependabot digest query failed (rc=$RC); skipping silently"
+            echo "$PRS" | head -5
+            exit 0
+          fi
+
+          # Keep only dependabot[bot] PRs opened in the last 24h.
+          CUTOFF=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          MATCHES=$(echo "$PRS" | jq -c --arg cutoff "$CUTOFF" \
+            '[ .[] | select(.user.login == "dependabot[bot]" and .created_at >= $cutoff) ]')
+          COUNT=$(echo "$MATCHES" | jq 'length')
+
+          # No empty DMs.
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No new Dependabot PRs in the last 24h — nothing to send."
+            exit 0
+          fi
+
+          REPO_NAME="${REPO#*/}"
+          LINES=$(echo "$MATCHES" | jq -r '.[] | "• #\(.number) \(.title) — \(.html_url)"')
+          TEXT="📦 Dependabot Update — ${REPO_NAME}: ${COUNT} new PRs"$'\n\n'"${LINES}"
+
+          PAYLOAD=$(jq -n --arg text "$TEXT" \
+            '{text: $text, name: "📦 Dependabot Digest", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${HOOK_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$HOOK_URL"
