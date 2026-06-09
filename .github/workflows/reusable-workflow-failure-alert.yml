@@ -32,7 +32,7 @@ jobs:
         run: |
           TEXT="❌ ${WORKFLOW} failed: ${REPO}"
           TEXT+=$'\nRun: '"${RUN_URL}"
-          PAYLOAD=$(jq -n --arg text "$TEXT" '{text: $text, deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
+          PAYLOAD=$(jq -n --arg message "$TEXT" '{message: $message, deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
           curl -sf -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
