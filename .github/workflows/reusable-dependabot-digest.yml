@@ -47,10 +47,18 @@ jobs:
           LINES=$(echo "$MATCHES" | jq -r '.[] | "• #\(.number) \(.title) — \(.html_url)"')
           TEXT="📦 Dependabot Update — ${REPO_NAME}: ${COUNT} new PRs"$'\n\n'"${LINES}"
 
-          PAYLOAD=$(jq -n --arg text "$TEXT" \
-            '{text: $text, name: "📦 Dependabot Digest", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
-          curl -sf -X POST \
+          PAYLOAD=$(jq -n --arg message "$TEXT" \
+            '{message: $message, name: "📦 Dependabot Digest", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
+          set +e
+          HTTP=$(curl -s -o /tmp/digest_resp -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" \
-            "$HOOK_URL"
+            "$HOOK_URL")
+          RC=$?
+          set -e
+          if [ $RC -ne 0 ] || [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
+            echo "::warning::Dependabot digest POST failed (rc=$RC, http=$HTTP); skipping silently"
+            head -5 /tmp/digest_resp 2>/dev/null
+            exit 0
+          fi
