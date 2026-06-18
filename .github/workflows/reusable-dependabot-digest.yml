@@ -2,6 +2,13 @@ name: "Reusable: Dependabot Digest"
 
 on:
   workflow_call:
+    inputs:
+      pr_ci_workflow:
+        required: true
+        type: string
+        description: |
+          Name of the PR-CI workflow on the caller repo (e.g. "CI", "Pull Requests",
+          "Test deployment"). Used to resolve green/red/pending status per PR.
     secrets:
       OPENCLAW_HOOK_URL:
         required: true
@@ -11,54 +18,111 @@ on:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      actions: read
+    env:
+      PROMPT_TEMPLATE: |
+        <role>
+        You are Chloé. You have just received an automated Dependabot digest from a
+        GitHub Actions workflow that runs once per week per repository.
+        </role>
+
+        <task>
+        1. Deliver the contents of <digest> below to Marco in our DM, verbatim.
+        2. Wait silently for Marco's response. This is the end of your turn.
+        3. In a later turn, if Marco confirms (e.g. "yes", "go ahead", "merge the
+           greens"), approve and merge ONLY the PRs marked ✅ green, using exactly:
+               gh pr merge <number> --squash --body ""
+        4. For PRs marked ❌ red or ⏳ pending, ask Marco per-PR rather than acting.
+        </task>
+
+        <context>
+        This message arrives from an automated workflow, not from Marco directly.
+        Marco will respond in a later turn with his decision. Your only action this
+        turn is to send <digest> to him verbatim.
+        </context>
+
+        <digest>
+        📦 Dependabot — {repo}: {count} new PRs ({date})
+
+        {bullets}
+
+        Should I approve and merge the green ones?
+        </digest>
     steps:
-      - name: Compose and send Dependabot digest
+      - name: Send digest
         env:
           REPO: ${{ github.repository }}
+          PR_CI_WORKFLOW: ${{ inputs.pr_ci_workflow }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
         run: |
-          # Self-healing: any non-2xx (rate limit, transient 5xx, auth blip) logs
-          # and exits 0 — a digest hiccup must never raise a failure alert.
+          set -e
+          REPO_NAME="${REPO#*/}"
+          DATE_ISO=$(date -u +%Y-%m-%d)
+
+          # Fetch open PRs. Self-healing on failure — never raise a workflow failure.
           set +e
-          PRS=$(gh api "repos/${REPO}/pulls?state=open&per_page=100" 2>&1)
-          RC=$?
+          PRS=$(gh api "repos/${REPO}/pulls?state=open&per_page=100" 2>&1); RC=$?
           set -e
           if [ $RC -ne 0 ]; then
-            echo "::warning::Dependabot digest query failed (rc=$RC); skipping silently"
+            echo "::warning::Digest query failed (rc=$RC); skipping"
             echo "$PRS" | head -5
             exit 0
           fi
 
-          # Keep only dependabot[bot] PRs opened in the last 24h.
+          # Filter to dependabot[bot] PRs created in the last 24h.
           CUTOFF=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           MATCHES=$(echo "$PRS" | jq -c --arg cutoff "$CUTOFF" \
             '[ .[] | select(.user.login == "dependabot[bot]" and .created_at >= $cutoff) ]')
           COUNT=$(echo "$MATCHES" | jq 'length')
-
-          # No empty DMs.
           if [ "$COUNT" -eq 0 ]; then
             echo "No new Dependabot PRs in the last 24h — nothing to send."
             exit 0
           fi
 
-          REPO_NAME="${REPO#*/}"
-          LINES=$(echo "$MATCHES" | jq -r '.[] | "• #\(.number) \(.title) — \(.html_url)"')
-          TEXT="📦 Dependabot Update — ${REPO_NAME}: ${COUNT} new PRs"$'\n\n'"${LINES}"
+          # Resolve per-PR CI status via the named PR-CI workflow conclusion.
+          status_for() {
+            local sha="$1" conclusion
+            conclusion=$(gh api \
+              "repos/${REPO}/actions/runs?event=pull_request&head_sha=${sha}&per_page=5" \
+              --jq '[.workflow_runs[] | select(.name == env.PR_CI_WORKFLOW)] | .[0].conclusion // "pending"' \
+              2>/dev/null || echo "pending")
+            case "$conclusion" in
+              success) echo "✅ green" ;;
+              failure|cancelled|timed_out|action_required) echo "❌ red" ;;
+              *) echo "⏳ pending" ;;
+            esac
+          }
 
-          PAYLOAD=$(jq -n --arg message "$TEXT" \
-            '{message: $message, name: "📦 Dependabot Digest", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
+          # Build bullets, one per PR, with CI status.
+          BULLETS=""
+          while IFS=$'\t' read -r NUM TITLE URL HEAD_SHA; do
+            STATUS=$(status_for "$HEAD_SHA")
+            LINE="• #${NUM} ${TITLE} — CI: ${STATUS} — ${URL}"
+            BULLETS=${BULLETS:+$BULLETS$'\n'}$LINE
+          done < <(echo "$MATCHES" | jq -r '.[] | [.number, .title, .html_url, .head.sha] | @tsv')
+
+          # Substitute placeholders in the template.
+          PROMPT="${PROMPT_TEMPLATE//\{repo\}/$REPO_NAME}"
+          PROMPT="${PROMPT//\{count\}/$COUNT}"
+          PROMPT="${PROMPT//\{date\}/$DATE_ISO}"
+          PROMPT="${PROMPT//\{bullets\}/$BULLETS}"
+
+          # Compose payload and POST to OpenClaw hook. Self-healing on non-2xx.
+          PAYLOAD=$(jq -n --arg msg "$PROMPT" \
+            '{message: $msg, name: "📦 Dependabot Digest", model: "openrouter/anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
+
           set +e
           HTTP=$(curl -s -o /tmp/digest_resp -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${HOOK_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            "$HOOK_URL")
-          RC=$?
+            -d "$PAYLOAD" "$HOOK_URL"); RC=$?
           set -e
           if [ $RC -ne 0 ] || [ "$HTTP" -lt 200 ] || [ "$HTTP" -ge 300 ]; then
-            echo "::warning::Dependabot digest POST failed (rc=$RC, http=$HTTP); skipping silently"
+            echo "::warning::Digest POST failed (rc=$RC http=$HTTP); skipping"
             head -5 /tmp/digest_resp 2>/dev/null
             exit 0
           fi
