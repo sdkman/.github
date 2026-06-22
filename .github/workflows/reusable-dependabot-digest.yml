@@ -91,19 +91,20 @@ jobs:
               --jq '[.workflow_runs[] | select(.name == env.PR_CI_WORKFLOW)] | .[0].conclusion // "pending"' \
               2>/dev/null || echo "pending")
             case "$conclusion" in
-              success) echo "✅ green" ;;
-              failure|cancelled|timed_out|action_required) echo "❌ red" ;;
-              *) echo "⏳ pending" ;;
+              success) echo "✅" ;;
+              failure|cancelled|timed_out|action_required) echo "❌" ;;
+              *) echo "⏳" ;;
             esac
           }
 
-          # Build bullets, one per PR, with CI status.
+          # Build bullets, one per PR: status emoji, number, then title. No URLs —
+          # bare links spawn noisy auto-embeds in Discord.
           BULLETS=""
-          while IFS=$'\t' read -r NUM TITLE URL HEAD_SHA; do
+          while IFS=$'\t' read -r NUM TITLE HEAD_SHA; do
             STATUS=$(status_for "$HEAD_SHA")
-            LINE="• #${NUM} ${TITLE} — CI: ${STATUS} — ${URL}"
+            LINE="${STATUS} #${NUM}  ${TITLE}"
             BULLETS=${BULLETS:+$BULLETS$'\n'}$LINE
-          done < <(echo "$MATCHES" | jq -r '.[] | [.number, .title, .html_url, .head.sha] | @tsv')
+          done < <(echo "$MATCHES" | jq -r '.[] | [.number, .title, .head.sha] | @tsv')
 
           # Substitute placeholders in the template.
           PROMPT="${PROMPT_TEMPLATE//\{repo\}/$REPO_NAME}"
