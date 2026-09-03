@@ -41,6 +41,14 @@ jobs:
               --jq 'map(select(.state == "open")) | .[0].number // empty')
           fi
           if [ -z "$PR_NUMBER" ]; then
+            # The commits/{sha}/pulls endpoint has been observed returning an empty
+            # array for genuine open fork PRs (confirmed on sdkman-cli-native#453 and
+            # #456) even though the commit is correctly indexed elsewhere. Fall back
+            # to the Search API, which resolved both of those cases correctly.
+            PR_NUMBER=$(gh api "search/issues?q=repo:$REPO+is:pr+is:open+$HEAD_SHA" \
+              --jq '.items[0].number // empty')
+          fi
+          if [ -z "$PR_NUMBER" ]; then
             echo "No open PR associated with this run — skipping."
             exit 0
           fi
