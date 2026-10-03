@@ -36,16 +36,21 @@ jobs:
           HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
           HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
         run: |
+          set -euo pipefail
+          
           # Defensive: never emit a notification with no issue/PR context
           # (e.g. if a caller is ever wired to a non-issue/PR event).
           if [ -z "${ISSUE_NUMBER}" ] && [ -z "${PR_NUMBER}" ]; then
             echo "No issue or PR number in payload (event=${EVENT_NAME}) — skipping."
             exit 0
           fi
+          
           INSTRUCTION="Brief notification only. Provide: repo + number + title + author + one sentence summary + link. No assessment, no suggestions, no follow-up questions unless asked."
           NOTIFICATION_NAME="GitHub Triage"
+          
           # Cap any user-supplied body so a 30 KB issue can't flood Discord or Haiku.
           trim() { local s="$1"; if [ ${#s} -gt 2000 ]; then printf '%s\n…(truncated)\n' "${s:0:2000}"; else printf '%s\n' "$s"; fi; }
+          
           if [ "$EVENT_NAME" = "issues" ]; then
             MSG="${INSTRUCTION}"$'\n\n'"New issue in ${REPO} — #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
             MSG+=$'\nAuthor: '"${SENDER}"
@@ -62,12 +67,26 @@ jobs:
             MSG+=$'\nURL: '"${COMMENT_URL}"
             MSG+=$'\n\n'"$(trim "$COMMENT_BODY")"
           fi
+          
           PAYLOAD=$(jq -n \
             --arg message "$MSG" \
             --arg name "$NOTIFICATION_NAME" \
             '{message: $message, name: $name, model: "anthropic/claude-haiku-4-5", deliver: true, channel: "discord", to: "channel:1474759623209783327"}')
-          curl -sf -X POST \
-            -H "Authorization: Bearer ${HOOK_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD" \
-            "$HOOK_URL"
+          
+          response_file="$(mktemp)"
+          
+          http_status="$(
+            curl --silent --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --request POST "$HOOK_URL" \
+              --header 'Content-Type: application/json' \
+              --header "Authorization: Bearer ${HOOK_TOKEN}" \
+              --data "$PAYLOAD"
+          )"
+          
+          if [[ "$http_status" != 2* ]]; then
+            echo "Notification hook returned HTTP $http_status"
+            cat "$response_file"
+            exit 1
+          fi
